@@ -1,3 +1,51 @@
+<!-- ========================================================================= -->
+<!-- IMPLEMENTATION NOTES — read this first (the original task prompt follows). -->
+<!-- ========================================================================= -->
+
+# ArmorHQ Sales Dashboard — what I built & why
+
+**For the intern taking this over:** start in `src/lib/db.ts`. Every number on the
+page and in the API is computed by a function there; the routes and the page are
+thin callers. Pure date/metric math lives in `src/lib/metrics.ts`.
+
+## What Dana sees at `/`
+She asked two questions: *"are my agents getting better or worse?"* and *"who do
+I talk to Monday?"* The page answers both, top to bottom:
+1. **Calls connected · last 7 days** — the number she checks every Monday, live
+   from the DB, front and center.
+2. **Connect rate · last 7 days** — context for the raw count.
+3. **Talk to on Monday** — the agents whose connect rate dropped most vs. the
+   prior week (her actual question, answered directly).
+4. **Agents · week over week** — the full roster, sorted worst-trending first,
+   with a colored ▲/▼ delta so "better or worse" is readable at a glance.
+
+## Decisions worth knowing
+- **One data module, thin routes.** All SQL is in `db.ts`; routes call one
+  function and serialize. Shared response shaping (no-store, JSON/CSV) is in
+  `src/lib/http.ts`. Pure helpers are split into `metrics.ts` — both for clean
+  separation and because the test bundler can't load `node:sqlite`.
+- **"Last 7 days" = a rolling 168-hour window `[now − 7d, now)`**, connected
+  outcomes only, capped at *now* — a call can't count toward "the last 7 days"
+  if it hasn't happened yet. Last-7 vs prior-7 windows are half-open so a
+  boundary call is never double-counted.
+- **Daily series (28-day digest, 14-day scorecard) use UTC calendar-day
+  buckets**, zero-filled to a fixed length so every day appears even with no
+  calls — that's why the API always returns exactly 28 / 14 entries.
+- **Dates compared as ISO strings, not via SQLite `date()`.** Stored timestamps
+  are UTC ISO 8601 ("…Z"), where lexicographic order *is* chronological order —
+  no timezone ambiguity, no per-row date parsing.
+- **CSV escaping** follows RFC 4180: a field is quoted only if it contains a
+  comma, quote, or newline (so `West Coast` stays unquoted; `Acme, Inc` doesn't).
+- **All four API routes set `Cache-Control: no-store` and `dynamic = "force-dynamic"`** — the numbers are always live.
+- **Mobile:** the hero/stat grid collapses to one column under `sm`, and the
+  roster table scrolls horizontally, so 375px is usable.
+- **Test:** `src/lib/db.test.ts` covers the metric/window math (rolling-window
+  boundaries, divide-by-zero guard, fixed-length day series, CSV escaping) — the
+  calculations QA needs to trust monthly without me.
+- **Node 22.5+** required for the built-in `node:sqlite` (see `.nvmrc`).
+
+---
+
 # Your task
 
 ArmorHQ has a customer named Dana. She's the head of sales at a 200-person inside sales team and she pays us a lot of money. The last time her account manager talked to her, she said:
